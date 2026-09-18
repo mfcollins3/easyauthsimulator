@@ -1,0 +1,21 @@
+{
+  "appHost": {
+    "path": "apphost.mts",
+    "language": "typescript/nodejs"
+  },
+  "sdk": {
+    "version": "13.5.4"
+  },
+  "packages": {
+    "EasyAuthSimulator": "../../src/EasyAuthSimulator/EasyAuthSimulator.csproj"
+  },
+  "profiles": {
+    "https": {
+      "applicationUrl": "https://localhost:17158;http://localhost:15164",
+      "environmentVariables": {
+        "ASPIRE_DASHBOARD_OTLP_ENDPOINT_URL": "https://localhost:21015",
+        "ASPIRE_RESOURCE_SERVICE_ENDPOINT_URL": "https://localhost:22299"
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/SampleApp.AppHost/SampleApp.AppHost.csproj" />
+    <Project Path="samples/SampleApp/SampleApp.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/EasyAuthSimulator/EasyAuthSimulator.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/EasyAuthSimulator.Tests/EasyAuthSimulator.Tests.csproj" />
+  </Folder>
+</Solution>

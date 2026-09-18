@@ -1,0 +1,15 @@
+## .NET
+bin/
+obj/
+*.user
+
+## Rider / VS
+.vs/
+.idea/
+*.suo
+
+## Aspire
+.aspire/
+
+## OS
+.DS_Store
