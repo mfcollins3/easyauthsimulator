@@ -43,8 +43,11 @@ builder.AddEasyAuthSimulator("auth", port: 8080)
 `AddEasyAuthSimulator` needs your AppHost to reference `EasyAuthSimulator.Hosting.csproj` (`IsAspireProjectResource="false"`, since the simulator runs as a container resource rather than an Aspire project resource) — see `samples/SampleApp.AppHost/SampleApp.AppHost.csproj`. It runs the `easyauthsimulator` image, so build it first:
 
 ```bash
-docker build -t easyauthsimulator:latest .
+docker build -t easyauthsimulator:latest -f src/EasyAuthSimulator/Dockerfile .
 ```
+
+Run this from the repo root — the Dockerfile's `COPY . .` and publish path assume a repo-root
+build context, not the `src/EasyAuthSimulator` directory.
 
 Aspire's container runtime picks up that locally-built image directly — no registry needed for local development. For a shared/CI setup, push it to a registry and point at it with the standard Aspire container methods instead, e.g. `.WithImageRegistry("myregistry.azurecr.io")` or `.WithImageTag("1.2.3")` on the resource `AddEasyAuthSimulator` returns.
 
@@ -140,9 +143,10 @@ Two artifacts ship independently:
 - **The `easyauthsimulator` container image** — the actual proxy. Build and push it like any
   other container:
   ```bash
-  docker build -t <your-registry>/easyauthsimulator:<version> .
+  docker build -t <your-registry>/easyauthsimulator:<version> -f src/EasyAuthSimulator/Dockerfile .
   docker push <your-registry>/easyauthsimulator:<version>
   ```
+  Run this from the repo root, for the same reason noted above.
 - **The `EasyAuthSimulator.Hosting` NuGet package** — the Aspire hosting integration, a small
   library with no dependency on the proxy's own build output:
   ```bash
