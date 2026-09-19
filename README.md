@@ -6,7 +6,8 @@ It's a YARP reverse proxy that performs a genuine OIDC sign-in against Microsoft
 
 ## Project layout
 
-- `src/EasyAuthSimulator` — the proxy, which also carries its own [Aspire](https://aspire.dev) hosting integration (`AddEasyAuthSimulator()` etc.) so an AppHost needs only one reference to it.
+- `src/EasyAuthSimulator` — the proxy, distributed as a container image (see the `Dockerfile`).
+- `src/EasyAuthSimulator.Hosting` — an [Aspire](https://aspire.dev) hosting integration (`AddEasyAuthSimulator()` etc.) that runs that image as a container resource; a tiny library with no dependency on the proxy's own build output.
 - `samples/SampleApp` — a minimal API that reads the injected headers.
 - `samples/SampleApp.AppHost` — runs the sample via a C# AppHost.
 - `samples/SampleApp.AppHost.TypeScript` — the same sample, wired up via a [TypeScript AppHost](https://aspire.dev/app-host/typescript-apphost/) instead.
@@ -39,7 +40,15 @@ builder.AddEasyAuthSimulator("auth", port: 8080)
     .WithExternalHttpEndpoints();
 ```
 
-`AddEasyAuthSimulator` needs your AppHost to reference `EasyAuthSimulator.csproj` (`IsAspireProjectResource="false"`, since it's launched via `AddExecutable` from its own compiled DLL rather than as an Aspire project resource) so it can resolve where the simulator's binary lives — see `samples/SampleApp.AppHost/SampleApp.AppHost.csproj`. It doesn't need to be a .NET project itself in any other sense: `WithUpstream` accepts any Aspire resource with an HTTP endpoint, so `api` above can just as well be a Go executable (`AddExecutable`) or a Node app (Aspire's JavaScript hosting integration).
+`AddEasyAuthSimulator` needs your AppHost to reference `EasyAuthSimulator.Hosting.csproj` (`IsAspireProjectResource="false"`, since the simulator runs as a container resource rather than an Aspire project resource) — see `samples/SampleApp.AppHost/SampleApp.AppHost.csproj`. It runs the `easyauthsimulator` image, so build it first:
+
+```bash
+docker build -t easyauthsimulator:latest .
+```
+
+Aspire's container runtime picks up that locally-built image directly — no registry needed for local development. For a shared/CI setup, push it to a registry and point at it with the standard Aspire container methods instead, e.g. `.WithImageRegistry("myregistry.azurecr.io")` or `.WithImageTag("1.2.3")` on the resource `AddEasyAuthSimulator` returns.
+
+`WithUpstream` accepts any Aspire resource with an HTTP endpoint, so `api` above can just as well be a Go executable (`AddExecutable`) or a Node app (Aspire's JavaScript hosting integration).
 
 Put the tenant ID, client ID, and secret in user secrets (`Parameters:entra-tenant-id`, etc.) — never in source.
 
@@ -66,13 +75,13 @@ await builder
   .withExternalHttpEndpoints();
 ```
 
-Add it to your AppHost's `aspire.config.json` under `packages`, pointing at this project by path
-for local development (swap for a published NuGet version once you publish one):
+Add it to your AppHost's `aspire.config.json` under `packages`, pointing at the hosting project by
+path for local development (swap for a published NuGet version once you publish one):
 
 ```json
 {
   "packages": {
-    "EasyAuthSimulator": "../../path/to/EasyAuthSimulator.csproj"
+    "EasyAuthSimulator": "../../path/to/EasyAuthSimulator.Hosting.csproj"
   }
 }
 ```
@@ -123,3 +132,27 @@ A few details of real EasyAuth are undocumented publicly and are called out with
 ```bash
 dotnet test
 ```
+
+## Distributing the simulator
+
+Two artifacts ship independently:
+
+- **The `easyauthsimulator` container image** — the actual proxy. Build and push it like any
+  other container:
+  ```bash
+  docker build -t <your-registry>/easyauthsimulator:<version> .
+  docker push <your-registry>/easyauthsimulator:<version>
+  ```
+- **The `EasyAuthSimulator.Hosting` NuGet package** — the Aspire hosting integration, a small
+  library with no dependency on the proxy's own build output:
+  ```bash
+  dotnet pack src/EasyAuthSimulator.Hosting/EasyAuthSimulator.Hosting.csproj -c Release -o ./nupkg
+  ```
+  Push the resulting `.nupkg` to whatever feed you use (a local folder feed, Azure Artifacts,
+  GitHub Packages, etc.) — see [`dotnet nuget push`](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-nuget-push).
+  From a TypeScript AppHost, add it to `aspire.config.json` by version instead of by path (see
+  above) once it's available from a feed the AppHost's restore can see.
+
+If you publish the image under a different name/tag than `easyauthsimulator:latest`, override it
+per-AppHost with `.WithImageRegistry()` / `.WithImage()` / `.WithImageTag()` on the resource
+`AddEasyAuthSimulator` returns, rather than forking the hosting package.

@@ -7,7 +7,7 @@
     "version": "13.5.4"
   },
   "packages": {
-    "EasyAuthSimulator": "../../src/EasyAuthSimulator/EasyAuthSimulator.csproj"
+    "EasyAuthSimulator": "../../src/EasyAuthSimulator.Hosting/EasyAuthSimulator.Hosting.csproj"
   },
   "profiles": {
     "https": {

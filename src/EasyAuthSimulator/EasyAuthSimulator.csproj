@@ -4,23 +4,11 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <!-- Generates the TypeScript SDK bindings for AddEasyAuthSimulator/WithUpstream/WithEntraId
-         from their [AspireExport] annotations when a TypeScript AppHost references this project. -->
-    <EnableAspireIntegrationAnalyzers>true</EnableAspireIntegrationAnalyzers>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting" Version="13.5.4" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.0" />
     <PackageReference Include="Yarp.ReverseProxy" Version="2.3.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <!-- Read back by ResolveSimulatorDllPath(): a polyglot AppHost's bridge loads this assembly
-         from an isolated staging copy containing only the DLL, so Assembly.Location can't be
-         trusted to point at a launchable build output. Baking the real path in at build time
-         sidesteps that. -->
-    <AssemblyMetadata Include="EasyAuthSimulator.BuildOutputPath" Value="$(TargetPath)" />
   </ItemGroup>
 
 </Project>

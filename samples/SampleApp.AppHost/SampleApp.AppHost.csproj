@@ -1,8 +1,10 @@
 <Project Sdk="Aspire.AppHost.Sdk/13.5.4">
 
   <ItemGroup>
-    <!-- Referenced only to call AddEasyAuthSimulator(); launched via AddExecutable(), not AddProject(), so it isn't an Aspire project resource. -->
-    <ProjectReference Include="..\..\src\EasyAuthSimulator\EasyAuthSimulator.csproj" IsAspireProjectResource="false" />
+    <!-- Referenced only to call AddEasyAuthSimulator(); the simulator itself runs as a container
+         (see AddContainer() in EasyAuthSimulatorResourceBuilderExtensions.cs), so it isn't an
+         Aspire project resource. -->
+    <ProjectReference Include="..\..\src\EasyAuthSimulator.Hosting\EasyAuthSimulator.Hosting.csproj" IsAspireProjectResource="false" />
     <ProjectReference Include="..\SampleApp\SampleApp.csproj" />
   </ItemGroup>
 

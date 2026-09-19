@@ -5,6 +5,7 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/EasyAuthSimulator/EasyAuthSimulator.csproj" />
+    <Project Path="src/EasyAuthSimulator.Hosting/EasyAuthSimulator.Hosting.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/EasyAuthSimulator.Tests/EasyAuthSimulator.Tests.csproj" />

@@ -1,6 +1,7 @@
 // TypeScript equivalent of ../SampleApp.AppHost/AppHost.cs — same resources, same simulator,
-// authored in TypeScript instead of C#. Requires no .NET code of its own beyond referencing
-// EasyAuthSimulator's compiled DLL (see aspire.config.json's "packages" entry); the app it
+// authored in TypeScript instead of C#. Requires no .NET code of its own beyond referencing the
+// EasyAuthSimulator.Hosting assembly (see aspire.config.json's "packages" entry) for typed
+// bindings; the simulator itself runs as the "easyauthsimulator" container image. The app it
 // fronts here happens to be the .NET SampleApp, but addProject() below could equally be
 // addContainer()/addExecutable() pointing at a Go binary or a Node app.
 //
