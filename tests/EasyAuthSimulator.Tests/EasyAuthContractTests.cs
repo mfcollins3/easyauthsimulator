@@ -167,6 +167,54 @@ public sealed class EasyAuthContractTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Login_ReturnsNotFound_ForUnknownProvider()
+    {
+        await using var factory = CreateFactory();
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var response = await client.GetAsync("/.auth/login/unknown-provider");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Logout_RedirectsToDoneEndpoint_ByDefault()
+    {
+        await using var factory = CreateFactory();
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var response = await client.GetAsync("/.auth/logout");
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal("/.auth/logout/done", response.Headers.Location!.ToString());
+    }
+
+    [Fact]
+    public async Task Logout_RedirectsToValidatedPostLogoutRedirectUri_WhenItsASameHostPath()
+    {
+        await using var factory = CreateFactory();
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var response = await client.GetAsync("/.auth/logout?post_logout_redirect_uri=/goodbye");
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal("/goodbye", response.Headers.Location!.ToString());
+    }
+
+    [Fact]
+    public async Task Logout_IgnoresUntrustedPostLogoutRedirectUri_AndFallsBackToDoneEndpoint()
+    {
+        await using var factory = CreateFactory();
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var response = await client.GetAsync(
+            "/.auth/logout?post_logout_redirect_uri=" + Uri.EscapeDataString("https://evil.example.com/steal"));
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal("/.auth/logout/done", response.Headers.Location!.ToString());
+    }
+
+    [Fact]
     public async Task ApiPrefix_RelocatesAuthSurface()
     {
         await using var factory = CreateFactory(("EasyAuth:ApiPrefix", "/custom-auth"));
