@@ -67,9 +67,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Compute image name
-        id: image
-        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - name: Compute tags
+        id: tags
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          {
+            echo "tags<<EOF"
+            echo "${image}:${{ needs.version.outputs.version }}"
+            echo "${image}:${{ needs.version.outputs.major_minor }}"
+            if [ "${{ needs.version.outputs.major }}" != "0" ]; then
+              echo "${image}:${{ needs.version.outputs.major }}"
+            fi
+            echo "${image}:latest"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build and push container image
         uses: docker/build-push-action@v7
@@ -77,11 +88,7 @@ jobs:
           context: .
           file: src/EasyAuthSimulator/Dockerfile
           push: true
-          tags: |
-            ${{ steps.image.outputs.name }}:${{ needs.version.outputs.version }}
-            ${{ steps.image.outputs.name }}:${{ needs.version.outputs.major_minor }}
-            ${{ steps.image.outputs.name }}:${{ needs.version.outputs.major }}
-            ${{ steps.image.outputs.name }}:latest
+          tags: ${{ steps.tags.outputs.tags }}
 
   nuget-publish:
     needs: version
