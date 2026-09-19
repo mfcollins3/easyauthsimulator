@@ -17,7 +17,8 @@ EasyAuthEnvironmentConfiguration.Apply(builder.Configuration);
 
 builder.Services
     .AddEasyAuth(builder.Configuration)
-    .AddEntraId();
+    .AddEntraId()
+    .AddCustomOpenIdConnect();
 
 var app = builder.Build();
 

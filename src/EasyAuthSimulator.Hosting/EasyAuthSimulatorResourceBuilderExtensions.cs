@@ -57,4 +57,26 @@ public static class EasyAuthSimulatorResourceBuilderExtensions
             .WithEnvironment("EASYAUTH_AAD_CLIENT_ID", clientId)
             .WithEnvironment("EASYAUTH_AAD_CLIENT_SECRET", clientSecret);
     }
+
+    /// <summary>
+    /// Wires up a custom OpenID Connect provider under the given unique name — any spec-compliant
+    /// IDP (Google, GitHub, Auth0, ...), discovered via its "{authority}/.well-known/openid-configuration"
+    /// metadata document rather than a provider-specific SDK
+    /// (learn.microsoft.com/azure/container-apps/authentication-openid). Call once per provider
+    /// with a distinct <paramref name="providerName"/> to enable more than one.
+    /// </summary>
+    [AspireExport]
+    public static IResourceBuilder<ContainerResource> WithCustomOpenIdConnect(
+        this IResourceBuilder<ContainerResource> builder,
+        string providerName,
+        string authority,
+        IResourceBuilder<ParameterResource> clientId,
+        IResourceBuilder<ParameterResource> clientSecret)
+    {
+        var upperName = providerName.ToUpperInvariant();
+        return builder
+            .WithEnvironment($"EASYAUTH_OIDC_{upperName}_AUTHORITY", authority)
+            .WithEnvironment($"EASYAUTH_OIDC_{upperName}_CLIENT_ID", clientId)
+            .WithEnvironment($"EASYAUTH_OIDC_{upperName}_CLIENT_SECRET", clientSecret);
+    }
 }
