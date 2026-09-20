@@ -17,10 +17,19 @@ const clientSecret = builder.addParameter('entra-client-secret', { secret: true 
 
 const api = await builder.addProject('api', '../SampleApp');
 
+// authenticationRequired defaults to false, so unauthenticated requests reach the app instead
+// of being redirected straight into a provider — giving the app a chance to show a picker
+// across both providers configured below.
 await builder
-  .addEasyAuthSimulator('auth', { port: 8080 })
+  .addEasyAuthSimulator('auth')
   .withUpstream(api)
   .withEntraId(tenantId, clientId, clientSecret)
+  .withCustomOpenIdConnect(
+    "demo",
+    "https://demo.duendesoftware.com",
+    builder.addParameter("demo-client-id"),
+    builder.addParameter("demo-client-secret", { secret: true })
+  )
   .withExternalHttpEndpoints();
 
 await builder.build().run();

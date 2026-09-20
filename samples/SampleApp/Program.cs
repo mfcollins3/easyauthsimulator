@@ -12,6 +12,7 @@ app.MapGet("/", (HttpContext context) =>
         ? """
           <h1>Not signed in</h1>
           <p><a href="/.auth/login/aad">Sign in with Microsoft Entra ID</a></p>
+          <p><a href="/.auth/login/demo">Sign in with the demo OpenID Connect provider</a></p>
           """
         : $"""
           <h1>Signed in as {WebUtility.HtmlEncode(principal.Value.Name)}</h1>
