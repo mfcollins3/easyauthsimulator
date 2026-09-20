@@ -16,8 +16,20 @@ public static class EntraIdServiceCollectionExtensions
         var services = builder.Services;
         var configuration = builder.Configuration;
 
+        var section = configuration.GetSection(AadProviderOptions.SectionName);
+
+        // A no-op when neither value is configured, mirroring AddCustomOpenIdConnect()'s
+        // opt-in-by-configuration behavior — callers who don't want Entra ID sign-in
+        // shouldn't be forced to supply AAD credentials just to start the app. If exactly one
+        // of the two is set, that's a likely misconfiguration, so registration proceeds and
+        // the validation below catches it at startup.
+        if (string.IsNullOrWhiteSpace(section["TenantId"]) && string.IsNullOrWhiteSpace(section["ClientId"]))
+        {
+            return builder;
+        }
+
         services.AddOptions<AadProviderOptions>()
-            .Bind(configuration.GetSection(AadProviderOptions.SectionName))
+            .Bind(section)
             .Validate(o => !string.IsNullOrWhiteSpace(o.TenantId) && !string.IsNullOrWhiteSpace(o.ClientId),
                 "EASYAUTH_AAD_TENANT_ID and EASYAUTH_AAD_CLIENT_ID are required to enable Entra ID sign-in.")
             .ValidateOnStart();

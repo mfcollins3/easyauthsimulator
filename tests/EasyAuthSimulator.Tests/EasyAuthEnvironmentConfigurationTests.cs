@@ -77,6 +77,54 @@ public sealed class EasyAuthEnvironmentConfigurationTests
     }
 
     [Fact]
+    public void Apply_MapsCustomOpenIdConnectProviderVariables_ByName()
+    {
+        using var scope = new EnvironmentVariableScope(
+            ("EASYAUTH_OIDC_GITHUB_CLIENT_ID", "client-1"),
+            ("EASYAUTH_OIDC_GITHUB_CLIENT_SECRET", "secret-1"),
+            ("EASYAUTH_OIDC_GITHUB_AUTHORITY", "https://github.example.com"),
+            ("EASYAUTH_OIDC_GITHUB_METADATA_ADDRESS", "https://github.example.com/.well-known/openid-configuration"),
+            ("EASYAUTH_OIDC_GITHUB_NAME_CLAIM_TYPE", "nickname"),
+            ("EASYAUTH_OIDC_GITHUB_ROLE_CLAIM_TYPE", "groups"));
+
+        var configuration = Build();
+
+        Assert.Equal("client-1", configuration["EasyAuth:CustomOpenIdConnect:GITHUB:ClientId"]);
+        Assert.Equal("secret-1", configuration["EasyAuth:CustomOpenIdConnect:GITHUB:ClientSecret"]);
+        Assert.Equal("https://github.example.com", configuration["EasyAuth:CustomOpenIdConnect:GITHUB:Authority"]);
+        Assert.Equal(
+            "https://github.example.com/.well-known/openid-configuration",
+            configuration["EasyAuth:CustomOpenIdConnect:GITHUB:MetadataAddress"]);
+        Assert.Equal("nickname", configuration["EasyAuth:CustomOpenIdConnect:GITHUB:NameClaimType"]);
+        Assert.Equal("groups", configuration["EasyAuth:CustomOpenIdConnect:GITHUB:RoleClaimType"]);
+    }
+
+    [Fact]
+    public void Apply_SplitsCustomOpenIdConnectScopes_AsADelimitedList()
+    {
+        using var scope = new EnvironmentVariableScope(("EASYAUTH_OIDC_GITHUB_SCOPES", "openid;profile;offline_access"));
+
+        var configuration = Build();
+
+        Assert.Equal("openid", configuration["EasyAuth:CustomOpenIdConnect:GITHUB:Scopes:0"]);
+        Assert.Equal("profile", configuration["EasyAuth:CustomOpenIdConnect:GITHUB:Scopes:1"]);
+        Assert.Equal("offline_access", configuration["EasyAuth:CustomOpenIdConnect:GITHUB:Scopes:2"]);
+    }
+
+    [Fact]
+    public void Apply_KeepsCustomOpenIdConnectProviders_Separate_ByName()
+    {
+        using var scope = new EnvironmentVariableScope(
+            ("EASYAUTH_OIDC_GITHUB_CLIENT_ID", "github-client"),
+            ("EASYAUTH_OIDC_AUTH0_CLIENT_ID", "auth0-client"));
+
+        var configuration = Build();
+
+        Assert.Equal("github-client", configuration["EasyAuth:CustomOpenIdConnect:GITHUB:ClientId"]);
+        Assert.Equal("auth0-client", configuration["EasyAuth:CustomOpenIdConnect:AUTH0:ClientId"]);
+    }
+
+    [Fact]
     public void Apply_IgnoresEnvironmentVariables_WithNoKnownAlias()
     {
         using var scope = new EnvironmentVariableScope(("EASYAUTH_NOT_A_REAL_SETTING", "value"));
