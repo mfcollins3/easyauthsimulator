@@ -40,16 +40,16 @@ builder.AddEasyAuthSimulator("auth", port: 8080)
     .WithExternalHttpEndpoints();
 ```
 
-`AddEasyAuthSimulator` needs your AppHost to reference `EasyAuthSimulator.Hosting.csproj` (`IsAspireProjectResource="false"`, since the simulator runs as a container resource rather than an Aspire project resource) — see `samples/SampleApp.AppHost/SampleApp.AppHost.csproj`. It runs the `easyauthsimulator` image, so build it first:
+`AddEasyAuthSimulator` needs your AppHost to reference `EasyAuthSimulator.Hosting.csproj` (`IsAspireProjectResource="false"`, since the simulator runs as a container resource rather than an Aspire project resource) — see `samples/SampleApp.AppHost/SampleApp.AppHost.csproj`. By default it pulls `ghcr.io/mfcollins3/easyauthsimulator`, anonymously, tagged at the same version as the `EasyAuthSimulator.Hosting` package you're using — no local build or registry login required.
+
+To run against a locally-built image instead (e.g. while working on the proxy itself), build it and point at it explicitly:
 
 ```bash
 docker build -t easyauthsimulator:latest -f src/EasyAuthSimulator/Dockerfile .
 ```
 
 Run this from the repo root — the Dockerfile's `COPY . .` and publish path assume a repo-root
-build context, not the `src/EasyAuthSimulator` directory.
-
-Aspire's container runtime picks up that locally-built image directly — no registry needed for local development. For a shared/CI setup, push it to a registry and point at it with the standard Aspire container methods instead, e.g. `.WithImageRegistry("myregistry.azurecr.io")` or `.WithImageTag("1.2.3")` on the resource `AddEasyAuthSimulator` returns.
+build context, not the `src/EasyAuthSimulator` directory. Then override the default with `.WithImage("easyauthsimulator")` on the resource `AddEasyAuthSimulator` returns (or `.WithImageRegistry()` / `.WithImageTag()` to point at a different published image).
 
 `WithUpstream` accepts any Aspire resource with an HTTP endpoint, so `api` above can just as well be a Go executable (`AddExecutable`) or a Node app (Aspire's JavaScript hosting integration).
 
@@ -138,25 +138,17 @@ dotnet test
 
 ## Distributing the simulator
 
-Two artifacts ship independently:
+Two artifacts ship together, from the same release tag (`.github/workflows/release.yml`), always
+at the same version number:
 
-- **The `easyauthsimulator` container image** — the actual proxy. Build and push it like any
-  other container:
-  ```bash
-  docker build -t <your-registry>/easyauthsimulator:<version> -f src/EasyAuthSimulator/Dockerfile .
-  docker push <your-registry>/easyauthsimulator:<version>
-  ```
-  Run this from the repo root, for the same reason noted above.
-- **The `EasyAuthSimulator.Hosting` NuGet package** — the Aspire hosting integration, a small
-  library with no dependency on the proxy's own build output:
-  ```bash
-  dotnet pack src/EasyAuthSimulator.Hosting/EasyAuthSimulator.Hosting.csproj -c Release -o ./nupkg
-  ```
-  Push the resulting `.nupkg` to whatever feed you use (a local folder feed, Azure Artifacts,
-  GitHub Packages, etc.) — see [`dotnet nuget push`](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-nuget-push).
-  From a TypeScript AppHost, add it to `aspire.config.json` by version instead of by path (see
-  above) once it's available from a feed the AppHost's restore can see.
+- **The `easyauthsimulator` container image** — the actual proxy, published to
+  `ghcr.io/mfcollins3/easyauthsimulator` tagged with the release version (plus `latest` and
+  rolling `major`/`major.minor` tags).
+- **The `EasyAuthSimulator.Hosting` NuGet package** — the Aspire hosting integration. Its default
+  image tag (see `EasyAuthSimulatorResourceBuilderExtensions`) is resolved from its own assembly
+  version at runtime, so installing `EasyAuthSimulator.Hosting` version `X.Y.Z` pulls
+  `ghcr.io/mfcollins3/easyauthsimulator:X.Y.Z` without any extra configuration.
 
-If you publish the image under a different name/tag than `easyauthsimulator:latest`, override it
+If you fork this repo or publish your own build under a different name/tag, override the default
 per-AppHost with `.WithImageRegistry()` / `.WithImage()` / `.WithImageTag()` on the resource
 `AddEasyAuthSimulator` returns, rather than forking the hosting package.
