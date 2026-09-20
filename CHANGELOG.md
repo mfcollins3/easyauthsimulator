@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Breaking:** `AddEasyAuthSimulator(builder, name, port)` now takes an `EasyAuthSimulatorOptions` object instead of a bare `port` parameter: `AddEasyAuthSimulator(builder, name, options)`. `Port` moved onto that object and still defaults to `8080`.
+- **Breaking:** `AddEasyAuthSimulator()` now defaults to the published `ghcr.io/mfcollins3/easyauthsimulator` image — pulled anonymously and tagged to match the installed `EasyAuthSimulator.Hosting` package's own version — instead of a local `easyauthsimulator:latest` build. To keep using a locally-built image, override it explicitly with `.WithImage("easyauthsimulator")` (or `.WithImageRegistry()` / `.WithImageTag()`).
 
 ### Fixed
 
