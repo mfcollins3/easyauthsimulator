@@ -11,7 +11,7 @@
 
   <PropertyGroup>
     <PackageId>EasyAuthSimulator.Hosting</PackageId>
-    <Version>0.1.1</Version>
+    <Version>0.2.0</Version>
     <Authors>Michael Collins</Authors>
     <Description>Aspire hosting integration (AddEasyAuthSimulator/WithUpstream/WithEntraId) that runs the EasyAuthSimulator container image — a local stand-in for Azure Container Apps' built-in authentication ("EasyAuth") — as part of an AppHost.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
