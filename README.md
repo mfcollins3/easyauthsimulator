@@ -4,12 +4,31 @@ A local stand-in for [Azure Container Apps' built-in authentication ("EasyAuth")
 
 It's a YARP reverse proxy that performs a genuine OIDC sign-in against Microsoft Entra ID or any other OpenID Connect–compliant provider, then injects the same `X-MS-CLIENT-PRINCIPAL*` / `X-MS-TOKEN-*` headers and exposes the same `/.auth/*` endpoints that Container Apps EasyAuth does in production, before forwarding the request to your app. Your app needs zero auth-related code changes between local development and Azure.
 
+## Contents
+
+- [Supported identity providers](#supported-identity-providers)
+- [Project layout](#project-layout)
+- [Running with Aspire](#running-with-aspire)
+  - [Using the published packages](#using-the-published-packages)
+  - [Common setup](#common-setup)
+  - [Using the Entra ID provider](#using-the-entra-id-provider)
+  - [Using a custom OpenID Connect provider](#using-a-custom-openid-connect-provider)
+  - [From a TypeScript AppHost](#from-a-typescript-apphost)
+- [Running standalone](#running-standalone)
+  - [Configuration (environment variables)](#configuration-environment-variables)
+- [Developing EasyAuthSimulator](#developing-easyauthsimulator)
+  - [Building the container image locally](#building-the-container-image-locally)
+  - [Adding another identity provider](#adding-another-identity-provider)
+- [Known deviations from the real service](#known-deviations-from-the-real-service)
+- [Tests](#tests)
+- [Distributing the simulator](#distributing-the-simulator)
+
 ## Supported identity providers
 
 | Provider | Real EasyAuth | EasyAuthSimulator |
 |---|---|---|
-| Microsoft Entra ID | Yes — built-in (`aad`) | Yes — `WithEntraId()` |
-| Any OpenID Connect–compliant provider (Google, Apple, Auth0, Okta, Duende IdentityServer, ...) | Yes — "Custom OpenID Connect" | Yes — `WithCustomOpenIdConnect()` |
+| Microsoft Entra ID | Yes — built-in (`aad`) | Yes — [`WithEntraId()`](#using-the-entra-id-provider) |
+| Any OpenID Connect–compliant provider (Google, Apple, Auth0, Okta, Duende IdentityServer, ...) | Yes — "Custom OpenID Connect" | Yes — [`WithCustomOpenIdConnect()`](#using-a-custom-openid-connect-provider) |
 | Facebook | Yes — built-in | No — Facebook Login isn't OpenID Connect–compliant, so there's no metadata document for `WithCustomOpenIdConnect()` to discover either |
 | GitHub | Yes — built-in | No — same reason; GitHub's OAuth apps don't implement OpenID Connect |
 | X (formerly Twitter) | Yes — built-in | No — same reason; OAuth, not OpenID Connect |
@@ -26,26 +45,99 @@ Facebook, GitHub, and X aren't reachable through `WithCustomOpenIdConnect()` eit
 - `samples/SampleApp.AppHost.TypeScript` — the same sample, wired up via a [TypeScript AppHost](https://aspire.dev/app-host/typescript-apphost/) instead.
 - `tests/EasyAuthSimulator.Tests` — contract tests against the documented EasyAuth header/endpoint behavior.
 
-## Prerequisites: register an app in Microsoft Entra ID
+## Running with Aspire
+
+### Using the published packages
+
+Both artifacts described in [Distributing the simulator](#distributing-the-simulator) are published
+publicly from this repo's CI: the `easyauthsimulator` container image to the GitHub Container
+Registry, and the `EasyAuthSimulator.Hosting` NuGet package to GitHub Packages.
+
+**Container image** — this is the default; `AddEasyAuthSimulator` pulls
+`ghcr.io/mfcollins3/easyauthsimulator` anonymously and automatically, tagged to match whichever
+version of `EasyAuthSimulator.Hosting` you have installed, so nothing below is required just to
+use it:
+
+```csharp
+builder.AddEasyAuthSimulator("auth")
+    .WithUpstream(api)
+    .WithEntraId(tenantId, clientId, secret)
+    .WithExternalHttpEndpoints();
+```
+
+You can still pull it yourself to inspect it or run it outside Aspire:
+
+```bash
+docker pull ghcr.io/mfcollins3/easyauthsimulator:<version>
+```
+
+**NuGet package** — also public, but GitHub Packages requires an authenticated pull for *every*
+package it hosts, public or not (there's no anonymous-read exception the way there is for GHCR
+container images). You'll need a classic personal access token with the `read:packages` scope
+(fine-grained tokens aren't supported for package installs):
+
+```bash
+dotnet nuget add source https://nuget.pkg.github.com/mfcollins3/index.json \
+  --name easyauthsimulator-github \
+  --username <your-github-username> \
+  --password <your-personal-access-token> \
+  --store-password-in-clear-text
+```
+
+From a C# AppHost:
+
+```bash
+dotnet add package EasyAuthSimulator.Hosting --version <version> --source easyauthsimulator-github
+```
+
+From a TypeScript AppHost, once the source above is configured:
+
+```bash
+aspire add EasyAuthSimulator.Hosting --version <version> --source easyauthsimulator-github
+```
+
+Either way, swap in the latest version from the
+[package's version history](https://github.com/mfcollins3/easyauthsimulator/pkgs/nuget/EasyAuthSimulator.Hosting).
+
+### Common setup
+
+```csharp
+var api = builder.AddProject<Projects.MyApi>("api");
+
+builder.AddEasyAuthSimulator("auth")
+    .WithUpstream(api)
+    // .WithEntraId(...) and/or .WithCustomOpenIdConnect(...) go here — see below
+    .WithExternalHttpEndpoints();
+```
+
+`AddEasyAuthSimulator` needs your AppHost to reference `EasyAuthSimulator.Hosting.csproj` (`IsAspireProjectResource="false"`, since the simulator runs as a container resource rather than an Aspire project resource) — see `samples/SampleApp.AppHost/SampleApp.AppHost.csproj`. By default it runs the [published container image](#using-the-published-packages) above; to run one you [build locally](#building-the-container-image-locally) instead (e.g. while working on the simulator itself), override it with `.WithImage("easyauthsimulator")`.
+
+`WithUpstream` accepts any Aspire resource with an HTTP endpoint, so `api` above can just as well be a Go executable (`AddExecutable`) or a Node app (Aspire's JavaScript hosting integration).
+
+**The port is pinned, not Aspire-allocated.** An identity provider validates the redirect URI against how you registered your app with it, so a random port would break sign-in on every run. Pick a port, register that exact redirect URI with your provider, and pass the same port via `EasyAuthSimulatorOptions.Port` (it defaults to `8080`, which is what the examples below rely on):
+
+```csharp
+builder.AddEasyAuthSimulator("auth", new EasyAuthSimulatorOptions { Port = 8081 })
+```
+
+Then wire up one or more identity providers — see below.
+
+### Using the Entra ID provider
 
 1. Register an app in your tenant (Entra admin center → App registrations → New registration).
-2. Add a **Redirect URI** (platform: Web) of `http://localhost:8080/.auth/login/aad/callback` — adjust the port if you configure a different `EASYAUTH_PORT`. Entra only permits plain `http://` for `localhost`.
+2. Add a **Redirect URI** (platform: Web) of `http://localhost:8080/.auth/login/aad/callback` — adjust the port if you configure a different `EASYAUTH_PORT`/`EasyAuthSimulatorOptions.Port`. Entra only permits plain `http://` for `localhost`.
 3. Create a **client secret** (Certificates & secrets).
 4. Enable ID token issuance, which Container Apps' own docs call out as required for EasyAuth:
    ```
    az ad app update --id <app-id> --enable-id-token-issuance true
    ```
 
-You'll need the tenant ID, client ID, and client secret from this registration.
-
-## Running with Aspire
+You'll need the tenant ID, client ID, and client secret from this registration:
 
 ```csharp
 var secret = builder.AddParameter("entra-client-secret", secret: true);
 var tenantId = builder.AddParameter("entra-tenant-id");
 var clientId = builder.AddParameter("entra-client-id");
-
-var api = builder.AddProject<Projects.MyApi>("api");
 
 builder.AddEasyAuthSimulator("auth")
     .WithUpstream(api)
@@ -53,26 +145,7 @@ builder.AddEasyAuthSimulator("auth")
     .WithExternalHttpEndpoints();
 ```
 
-`AddEasyAuthSimulator` needs your AppHost to reference `EasyAuthSimulator.Hosting.csproj` (`IsAspireProjectResource="false"`, since the simulator runs as a container resource rather than an Aspire project resource) — see `samples/SampleApp.AppHost/SampleApp.AppHost.csproj`. By default it pulls `ghcr.io/mfcollins3/easyauthsimulator`, anonymously, tagged at the same version as the `EasyAuthSimulator.Hosting` package you're using — no local build or registry login required.
-
-To run against a locally-built image instead (e.g. while working on the proxy itself), build it and point at it explicitly:
-
-```bash
-docker build -t easyauthsimulator:latest -f src/EasyAuthSimulator/Dockerfile .
-```
-
-Run this from the repo root — the Dockerfile's `COPY . .` and publish path assume a repo-root
-build context, not the `src/EasyAuthSimulator` directory. Then override the default with `.WithImage("easyauthsimulator")` on the resource `AddEasyAuthSimulator` returns (or `.WithImageRegistry()` / `.WithImageTag()` to point at a different published image).
-
-`WithUpstream` accepts any Aspire resource with an HTTP endpoint, so `api` above can just as well be a Go executable (`AddExecutable`) or a Node app (Aspire's JavaScript hosting integration).
-
 Put the tenant ID, client ID, and secret in user secrets (`Parameters:entra-tenant-id`, etc.) — never in source.
-
-**The port is pinned, not Aspire-allocated.** Entra validates the redirect URI against your app registration, so a random port would break sign-in on every run. Pick a port, register that exact redirect URI, and pass the same port via `EasyAuthSimulatorOptions.Port` (it defaults to `8080`, which is what the examples above rely on):
-
-```csharp
-builder.AddEasyAuthSimulator("auth", new EasyAuthSimulatorOptions { Port = 8081 })
-```
 
 See `samples/SampleApp.AppHost/AppHost.cs` for a complete example.
 
@@ -114,7 +187,7 @@ await builder
 ```
 
 Add it to your AppHost's `aspire.config.json` under `packages`, pointing at the hosting project by
-path for local development (see [Using the published packages](#using-the-published-packages) below
+path for local development (see [Using the published packages](#using-the-published-packages) above
 for the published-NuGet-package form instead):
 
 ```json
@@ -127,57 +200,6 @@ for the published-NuGet-package form instead):
 
 Then run `aspire restore` to regenerate the SDK, or just `aspire run`. See
 `samples/SampleApp.AppHost.TypeScript/apphost.mts` for the complete, working example.
-
-### Using the published packages
-
-Both artifacts described in [Distributing the simulator](#distributing-the-simulator) are published
-publicly from this repo's CI: the `easyauthsimulator` container image to the GitHub Container
-Registry, and the `EasyAuthSimulator.Hosting` NuGet package to GitHub Packages.
-
-**Container image** — public, no authentication needed to pull:
-
-```bash
-docker pull ghcr.io/mfcollins3/easyauthsimulator:<version>
-```
-
-In Aspire, point at it instead of building locally:
-
-```csharp
-builder.AddEasyAuthSimulator("auth")
-    .WithUpstream(api)
-    .WithEntraId(tenantId, clientId, secret)
-    .WithImage("ghcr.io/mfcollins3/easyauthsimulator")
-    .WithImageTag("<version>")
-    .WithExternalHttpEndpoints();
-```
-
-**NuGet package** — also public, but GitHub Packages requires an authenticated pull for *every*
-package it hosts, public or not (there's no anonymous-read exception the way there is for GHCR
-container images). You'll need a classic personal access token with the `read:packages` scope
-(fine-grained tokens aren't supported for package installs):
-
-```bash
-dotnet nuget add source https://nuget.pkg.github.com/mfcollins3/index.json \
-  --name easyauthsimulator-github \
-  --username <your-github-username> \
-  --password <your-personal-access-token> \
-  --store-password-in-clear-text
-```
-
-From a C# AppHost:
-
-```bash
-dotnet add package EasyAuthSimulator.Hosting --version <version> --source easyauthsimulator-github
-```
-
-From a TypeScript AppHost, once the source above is configured:
-
-```bash
-aspire add EasyAuthSimulator.Hosting --version <version> --source easyauthsimulator-github
-```
-
-Either way, swap in the latest version from the
-[package's version history](https://github.com/mfcollins3/easyauthsimulator/pkgs/nuget/EasyAuthSimulator.Hosting).
 
 ## Running standalone
 
@@ -214,9 +236,24 @@ dotnet run --project src/EasyAuthSimulator
 | `EASYAUTH_FORWARD_ORIGINAL_HOST` | `true` | Forwards the original ingress Host header to your app. |
 | `EASYAUTH_ALLOWED_EXTERNAL_REDIRECT_HOSTS` | — | `;`-separated hosts allowed for `post_login_redirect_uri`/`post_logout_redirect_uri` beyond the current host. |
 
-## Adding another identity provider
+## Developing EasyAuthSimulator
 
-If the provider speaks standard OpenID Connect, you don't need to add anything — use `WithCustomOpenIdConnect()` (see [Using a custom OpenID Connect provider](#using-a-custom-openid-connect-provider) above) instead. This section is for a provider that isn't OIDC-compliant (e.g. Facebook, GitHub, X — see [Supported identity providers](#supported-identity-providers)).
+This section is for working on EasyAuthSimulator itself. If you just want to use it, see [Running with Aspire](#running-with-aspire) instead.
+
+### Building the container image locally
+
+`AddEasyAuthSimulator` pulls the published image by default (see [Using the published packages](#using-the-published-packages)), so to pick up local changes to the proxy, build it and point at it explicitly:
+
+```bash
+docker build -t easyauthsimulator:latest -f src/EasyAuthSimulator/Dockerfile .
+```
+
+Run this from the repo root — the Dockerfile's `COPY . .` and publish path assume a repo-root
+build context, not the `src/EasyAuthSimulator` directory. Then override the default with `.WithImage("easyauthsimulator")` on the resource `AddEasyAuthSimulator` returns (or `.WithImageRegistry()` / `.WithImageTag()` to point at a different published image). If you're publishing a build for others to consume, see [Distributing the simulator](#distributing-the-simulator) below instead.
+
+### Adding another identity provider
+
+If the provider speaks standard OpenID Connect, you don't need to add anything — use `WithCustomOpenIdConnect()` (see [Using a custom OpenID Connect provider](#using-a-custom-openid-connect-provider)) instead. This section is for a provider that isn't OIDC-compliant (e.g. Facebook, GitHub, X — see [Supported identity providers](#supported-identity-providers)).
 
 Implement `IEasyAuthProvider` (`src/EasyAuthSimulator/Providers/IEasyAuthProvider.cs`) and register it alongside its authentication handler in a `AddXxx()` extension method modeled on `EntraIdServiceCollectionExtensions.AddEntraId()`. Nothing else in the pipeline needs to change — routing, header injection, and the `/.auth/*` endpoints are all provider-agnostic.
 
