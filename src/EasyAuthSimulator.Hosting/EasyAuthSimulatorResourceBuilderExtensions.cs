@@ -1,3 +1,4 @@
+using System.Reflection;
 using Aspire.Hosting.ApplicationModel;
 
 namespace Aspire.Hosting;
@@ -16,16 +17,43 @@ file sealed record EasyAuthProviderAnnotation(string ProviderName) : IResourceAn
 
 public static class EasyAuthSimulatorResourceBuilderExtensions
 {
-    /// <summary>Default image for the simulator; override with WithImage()/WithImageTag()/WithImageRegistry().</summary>
-    private const string ContainerImage = "easyauthsimulator";
+    /// <summary>
+    /// Default image for the simulator, published anonymously-pullable from GitHub Packages;
+    /// override with WithImage()/WithImageTag()/WithImageRegistry() to point at a locally-built
+    /// image instead.
+    /// </summary>
+    private const string ContainerImage = "ghcr.io/mfcollins3/easyauthsimulator";
 
-    private const string ContainerImageTag = "latest";
+    /// <summary>
+    /// Defaults to this package's own version, so a given EasyAuthSimulator.Hosting release always
+    /// pulls the matching easyauthsimulator image — both are published together by the same
+    /// release build. Falls back to "latest" if the informational version can't be read (e.g. a
+    /// local build of this project with no Version set).
+    /// </summary>
+    private static readonly string ContainerImageTag = ResolveDefaultImageTag();
+
+    private static string ResolveDefaultImageTag()
+    {
+        var informationalVersion = typeof(EasyAuthSimulatorResourceBuilderExtensions).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+
+        if (informationalVersion is not { Length: > 0 } value)
+        {
+            return "latest";
+        }
+
+        // The SDK appends "+<sourcerevisionid>" to the informational version for deterministic
+        // builds; the image is tagged with the bare release version, not a commit hash.
+        var plusIndex = value.IndexOf('+');
+        return plusIndex >= 0 ? value[..plusIndex] : value;
+    }
 
     /// <summary>
     /// Adds the EasyAuth simulator as a container resource. The AppHost needs a reference to this
     /// assembly to call this method, but not a build of EasyAuthSimulator itself — the app ships
-    /// as the "easyauthsimulator" container image (build it from the Dockerfile at the repo root,
-    /// or point at a published one via WithImageRegistry()/WithImageTag()).
+    /// as the "ghcr.io/mfcollins3/easyauthsimulator" container image, pulled automatically at the
+    /// version matching this package (override with WithImageRegistry()/WithImage()/WithImageTag()
+    /// to use a locally-built image instead).
     /// </summary>
     [AspireExport]
     public static IResourceBuilder<ContainerResource> AddEasyAuthSimulator(
