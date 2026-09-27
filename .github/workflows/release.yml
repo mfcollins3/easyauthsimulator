@@ -100,6 +100,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write # enables GitHub OIDC token issuance for NuGet.org trusted publishing
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -124,8 +125,21 @@ jobs:
             --password "${{ secrets.GITHUB_TOKEN }}" \
             --store-password-in-clear-text
 
-      - name: Push
+      - name: Push to GitHub Packages
         run: dotnet nuget push "nupkgs/*.nupkg" --source github --api-key "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: NuGet.org login (OIDC → temporary API key)
+        uses: NuGet/login@v1
+        id: nuget-login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Push to NuGet.org
+        run: |
+          dotnet nuget push "nupkgs/*.nupkg" \
+            --source https://api.nuget.org/v3/index.json \
+            --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" \
+            --skip-duplicate
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v7

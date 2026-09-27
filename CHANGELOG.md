@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-27
+
+### Changed
+
+- **Breaking:** Moved the `EasyAuthSimulator.Hosting` NuGet package from GitrHub
+  Packages to the [official NuGet feed](https://www.nuget.org). This will make
+  it easier for developers to use this package without needing to register
+  GitHub Packages as a NuGet source and log into GitHub Packages.
+  
 ## [0.2.0] - 2026-09-20
 
 ### Added
